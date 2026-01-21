@@ -1205,4 +1205,83 @@ public class InlineModelResolverTest {
         assertNotNull(allOfRefWithDescriptionAndReadonly.getAllOf());
         assertEquals(numberRangeRef, ((Schema) allOfRefWithDescriptionAndReadonly.getAllOf().get(0)).get$ref());
     }
+
+    @Test
+    public void resolveRequestBodyWithRefToComponentSchema() {
+        OpenAPI openAPI = new OpenAPI();
+        openAPI.setComponents(new Components());
+        
+        // Create a component schema
+        ObjectSchema userSchema = new ObjectSchema()
+                .title("User")
+                .addProperty("id", new IntegerSchema())
+                .addProperty("name", new StringSchema());
+        openAPI.getComponents().addSchemas("User", userSchema);
+        
+        // Create an operation with requestBody that references the component schema
+        openAPI.path("/test", new PathItem()
+                .post(new Operation()
+                        .operationId("testPost")
+                        .requestBody(new RequestBody()
+                                .content(new Content()
+                                        .addMediaType("application/json",
+                                                new MediaType()
+                                                        .schema(new Schema().$ref("#/components/schemas/User")))))));
+        
+        new InlineModelResolver().flatten(openAPI);
+        
+        // Verify that the requestBody schema uses the referenced schema name "User" 
+        // instead of operation-based name "testPost_request"
+        RequestBody requestBody = openAPI.getPaths().get("/test").getPost().getRequestBody();
+        Schema requestBodySchema = requestBody.getContent().get("application/json").getSchema();
+        
+        // When a requestBody schema has a $ref to a component schema, it should reference that schema directly
+        // and not create an inline schema with operation-based naming
+        assertNotNull(requestBodySchema.get$ref());
+        assertEquals("#/components/schemas/User", requestBodySchema.get$ref());
+        
+        // Verify that no operation-based schema was created
+        assertNull(openAPI.getComponents().getSchemas().get("testPost_request"));
+        
+        // Verify that the User schema still exists
+        assertNotNull(openAPI.getComponents().getSchemas().get("User"));
+    }
+
+    @Test
+    public void resolveRequestBodyWithRefToComponentSchemaWithTitle() {
+        OpenAPI openAPI = new OpenAPI();
+        openAPI.setComponents(new Components());
+        
+        // Create a component schema with a title
+        ObjectSchema petSchema = new ObjectSchema()
+                .title("Pet")
+                .addProperty("id", new IntegerSchema())
+                .addProperty("name", new StringSchema());
+        openAPI.getComponents().addSchemas("Pet", petSchema);
+        
+        // Create an operation with requestBody that references the component schema
+        openAPI.path("/pets", new PathItem()
+                .post(new Operation()
+                        .operationId("createPet")
+                        .requestBody(new RequestBody()
+                                .content(new Content()
+                                        .addMediaType("application/json",
+                                                new MediaType()
+                                                        .schema(new Schema().$ref("#/components/schemas/Pet")))))));
+        
+        new InlineModelResolver().flatten(openAPI);
+        
+        // Verify that the requestBody schema uses the referenced schema name "Pet"
+        RequestBody requestBody = openAPI.getPaths().get("/pets").getPost().getRequestBody();
+        Schema requestBodySchema = requestBody.getContent().get("application/json").getSchema();
+        
+        assertNotNull(requestBodySchema.get$ref());
+        assertEquals("#/components/schemas/Pet", requestBodySchema.get$ref());
+        
+        // Verify that no operation-based schema was created
+        assertNull(openAPI.getComponents().getSchemas().get("createPet_request"));
+        
+        // Verify that the Pet schema still exists
+        assertNotNull(openAPI.getComponents().getSchemas().get("Pet"));
+    }
 }
